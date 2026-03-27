@@ -63,13 +63,15 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 var app = builder.Build();
 
 // ─── PIPELINE HTTP ────────────────────────────────────────────────────────────
-if (app.Environment.IsDevelopment())
+
+// ALTERE ESTA LINHA: adicione o IsProduction()
+if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Vagas API v1");
-        c.RoutePrefix = "swagger"; // Acessível em http://localhost:PORTA/swagger
+        c.RoutePrefix = "swagger"; 
     });
 }
 
