@@ -1,17 +1,21 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /app
 
-COPY *.csproj ./
+# Copia apenas o projeto primeiro para aproveitar o cache das camadas do Docker
+COPY AsylumVagasAPI.csproj ./
 RUN dotnet restore
 
+# Agora copia o restante dos arquivos
 COPY . ./
-RUN dotnet publish -c Release -o out
+
+# Especificamos o arquivo de projeto para evitar o erro MSB1011
+RUN dotnet publish "AsylumVagasAPI.csproj" -c Release -o out
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=build /app/out .
 
-# O Railway injeta a porta automaticamente, mas o .NET precisa ouvir em todas as interfaces
+# Configurações de porta para o Railway
 ENV ASPNETCORE_URLS=http://+:5000
 EXPOSE 5000
 
