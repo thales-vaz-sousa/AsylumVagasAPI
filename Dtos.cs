@@ -12,6 +12,15 @@ public record CreateAsiloDto(
     [Required, MaxLength(20)]  string Telefone
 );
 
+// ─── QUARTO (NOVO - Para resolver o erro do Repository) ───────────────────────
+
+public record UpdateQuartoDto(
+    [Required, MaxLength(50)]  string Numero,
+    [Required, MaxLength(100)] string Tipo,
+    [Required]                 decimal PrecoBase,
+    [Required]                 int CapacidadeTotal
+);
+
 // ─── RESIDENTE ────────────────────────────────────────────────────────────────
 
 public record CreateResidenteDto(
@@ -41,11 +50,11 @@ public record QuartoDisponivelDto(
 );
 
 public record AsiloComVagasDto(
-    int                          AsiloId,
-    string                       Nome,
-    string                       Endereco,
-    string                       Cidade,
-    string                       Telefone,
+    int    AsiloId, // Garantindo o tipo explícito
+    string Nome,
+    string Endereco,
+    string Cidade,
+    string Telefone,
     IEnumerable<QuartoDisponivelDto> Quartos
 );
 

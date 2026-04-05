@@ -26,51 +26,54 @@ public class VagaRepository : IVagaRepository
     {
         const string sql = """
             SELECT
-                a.id            AS AsiloId,
-                a.nome          AS Nome,
-                a.endereco      AS Endereco,
-                a.cidade        AS Cidade,
-                a.telefone      AS Telefone,
-                q.id            AS QuartoId,
-                q.numero        AS Numero,
-                q.tipo          AS Tipo,
-                q.preco_base    AS PrecoBase,
-                q.capacidade_total AS CapacidadeTotal,
-                COUNT(r.id) FILTER (WHERE r.status = 'Ativo') AS ResidentesAtivos,
-                q.capacidade_total - COUNT(r.id) FILTER (WHERE r.status = 'Ativo') AS VagasDisponiveis
+                a.id            AS asilo_id,
+                a.nome,
+                a.endereco,
+                a.cidade,
+                a.telefone,
+                q.id            AS quarto_id,
+                q.numero,
+                q.tipo,
+                q.preco_base    AS preco_base,
+                q.capacidade_total AS capacidade_total,
+                COUNT(r.id) FILTER (WHERE r.status = 'Ativo') AS residentes_ativos,
+                q.capacidade_total - COUNT(r.id) FILTER (WHERE r.status = 'Ativo') AS vagas_disponiveis
             FROM asilos a
             INNER JOIN quartos q ON q.asilo_id = a.id
             LEFT JOIN residentes r ON r.quarto_id = q.id
             GROUP BY a.id, a.nome, a.endereco, a.cidade, a.telefone,
-                     q.id, q.numero, q.tipo, q.preco_base, q.capacidade_total
+                    q.id, q.numero, q.tipo, q.preco_base, q.capacidade_total
             HAVING (q.capacidade_total - COUNT(r.id) FILTER (WHERE r.status = 'Ativo')) > 0
             ORDER BY a.nome, q.numero;
             """;
 
         using var connection = CreateConnection();
-
-        // 1. Buscamos todos os dados como uma lista flat (plana)
-        // Usamos dynamic aqui apenas para facilitar a leitura das colunas do SQL
+        
+        // Buscamos como dynamic para lidar com o agrupamento manual
         var rows = await connection.QueryAsync<dynamic>(sql);
 
-        // 2. Agrupamos os dados por Asilo usando LINQ (muito mais limpo e evita o erro CS8917)
+        // Agrupamento usando nomes em minúsculo (padrão do Postgres/Dapper dinâmico)
         var resultado = rows.GroupBy(r => new { 
-            r.asiloid, r.nome, r.endereco, r.cidade, r.telefone 
+            id = r.asilo_id, 
+            nome = r.nome, 
+            endereco = r.endereco, 
+            cidade = r.cidade, 
+            telefone = r.telefone 
         })
         .Select(g => new AsiloComVagasDto(
-            AsiloId: (int)g.Key.asiloid,
+            AsiloId: (int)g.Key.id,
             Nome: (string)g.Key.nome,
             Endereco: (string)g.Key.endereco,
             Cidade: (string)g.Key.cidade,
             Telefone: (string)g.Key.telefone,
             Quartos: g.Select(q => new QuartoDisponivelDto(
-                QuartoId: (int)q.quartoid,
+                QuartoId: (int)q.quarto_id,
                 Numero: (string)q.numero,
                 Tipo: (string)q.tipo,
-                PrecoBase: (decimal)q.precobase,
-                CapacidadeTotal: (int)q.capacidadetotal,
-                ResidentesAtivos: (int)(long)q.residentesativos,
-                VagasDisponiveis: (int)(long)q.vagasdisponiveis
+                PrecoBase: (decimal)q.preco_base,
+                CapacidadeTotal: (int)q.capacidade_total,
+                ResidentesAtivos: Convert.ToInt32(q.residentes_ativos),
+                VagasDisponiveis: Convert.ToInt32(q.vagas_disponiveis)
             )).ToList()
         ));
 
@@ -83,21 +86,25 @@ public class VagaRepository : IVagaRepository
         const string sql = """
             INSERT INTO asilos (nome, cnpj, endereco, cidade, telefone)
             VALUES (@Nome, @CNPJ, @Endereco, @Cidade, @Telefone)
-            RETURNING id, nome, cnpj, endereco, cidade, telefone;
+            RETURNING 
+                id       AS Id, 
+                nome     AS Nome, 
+                cnpj     AS CNPJ, 
+                endereco AS Endereco, 
+                cidade   AS Cidade, 
+                telefone AS Telefone;
             """;
 
         using var connection = CreateConnection();
 
-        var asilo = await connection.QuerySingleAsync<Asilo>(sql, new
+        return await connection.QuerySingleAsync<Asilo>(sql, new
         {
             dto.Nome,
             dto.CNPJ,
             dto.Endereco,
-            Cidade   = dto.Cidade ?? "Criciúma",
+            Cidade = dto.Cidade ?? "Criciúma",
             dto.Telefone
         });
-
-        return asilo;
     }
 
     // ─── RESIDENTES ───────────────────────────────────────────────────────────
@@ -176,5 +183,55 @@ public class VagaRepository : IVagaRepository
         using var connection = CreateConnection();
 
         return await connection.QueryAsync<SolicitacaoVaga>(sql, new { AsiloId = asiloId });
+    }
+
+    // Métodos de Update e Delete para Asilos
+    public async Task<Asilo> UpdateAsiloAsync(int id, CreateAsiloDto dto) {
+        const string sql = @"
+            UPDATE asilos SET 
+                nome = @Nome, 
+                cnpj = @CNPJ, 
+                endereco = @Endereco, 
+                cidade = @Cidade, 
+                telefone = @Telefone 
+            WHERE id = @Id
+            RETURNING id, nome, cnpj, endereco, cidade, telefone;"; // Remova o 'AS AsiloId'
+        
+        using var conn = CreateConnection();
+        return await conn.QuerySingleAsync<Asilo>(sql, new { 
+            Id = id, 
+            dto.Nome, 
+            dto.CNPJ, 
+            dto.Endereco, 
+            Cidade = dto.Cidade ?? "Criciúma", 
+            dto.Telefone 
+        });
+    }
+
+    public async Task<bool> DeleteAsiloAsync(int id) {
+        const string sql = "DELETE FROM asilos WHERE id = @Id";
+        using var conn = CreateConnection();
+        return await conn.ExecuteAsync(sql, new { Id = id }) > 0;
+    }
+
+// Métodos para Quartos
+    public async Task<bool> UpdateQuartoAsync(int id, UpdateQuartoDto dto) 
+    {
+        const string sql = @"
+            UPDATE quartos 
+            SET numero = @Numero, 
+                tipo = @Tipo, 
+                preco_base = @PrecoBase, 
+                capacidade_total = @CapacidadeTotal 
+            WHERE id = @Id";
+
+        using var conn = CreateConnection();
+        return await conn.ExecuteAsync(sql, new { 
+            Id = id, 
+            dto.Numero, 
+            dto.Tipo, 
+            dto.PrecoBase, 
+            dto.CapacidadeTotal 
+        }) > 0;
     }
 }

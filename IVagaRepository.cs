@@ -18,4 +18,8 @@ public interface IVagaRepository
     // Solicitações
     Task<SolicitacaoVaga>             CreateSolicitacaoAsync(CreateSolicitacaoDto dto);
     Task<IEnumerable<SolicitacaoVaga>> GetSolicitacoesPendentesByAsiloAsync(int asiloId);
+
+    Task<Asilo> UpdateAsiloAsync(int id, CreateAsiloDto dto);
+    Task<bool> DeleteAsiloAsync(int id);
+    Task<bool> UpdateQuartoAsync(int id, UpdateQuartoDto dto);
 }
